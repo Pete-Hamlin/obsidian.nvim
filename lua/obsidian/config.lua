@@ -343,6 +343,7 @@ config.Picker = {
   telescope = "telescope.nvim",
   fzf_lua = "fzf-lua",
   mini = "mini.pick",
+  snacks = "snacks.nvim",
 }
 
 ---@class obsidian.config.PickerOpts
