@@ -1,4 +1,4 @@
-local snacks_pick = require "snacks"
+local snacks = require "snacks"
 
 local Path = require "obsidian.path"
 local abc = require "obsidian.abc"
@@ -25,18 +25,15 @@ SnacksPicker.find_files = function(self, opts)
 
   ---@type obsidian.Path
   local dir = opts.dir and Path:new(opts.dir) or self.client.dir
-  snacks_pick.picker.file {
+  local item = snacks.picker.files {
     title = opts.prompt_title,
     cwd = tostring(dir),
-    confirm = function(picker, item)
-      picker.close()
-      vim.schedule(function()
-        if item and opts.callback then
-          opts.callback(item)
-        end
-      end)
-    end,
   }
+
+  if item and opts.callback then
+    local path = clean_path(item)
+    opts.callback(tostring(dir / path))
+  end
 end
 
 ---@param opts obsidian.PickerGrepOpts|? Options.
@@ -48,20 +45,15 @@ SnacksPicker.grep = function(self, opts)
 
   local pick_opts = {
     name = opts.prompt_title,
+    cwd = tostring(dir),
     dirs = { tostring(dir) },
     search = opts.query,
-    confirm = function(picker, item)
-      picker.close()
-      vim.schedule(function()
-        if item and opts.callback then
-          opts.callback(item)
-        end
-      end)
-    end,
   }
 
-  if opts.query and string.len(opts.query) > 0 then
-    snacks_pick.picker.grep(pick_opts)
+  local result = snacks.picker.grep(pick_opts)
+  if result and opts.callback then
+    local path = clean_path(result)
+    opts.callback(tostring(dir / path))
   end
 end
 
@@ -76,33 +68,45 @@ SnacksPicker.pick = function(self, values, opts)
   local entries = {}
   for _, value in ipairs(values) do
     if type(value) == "string" then
-      entries[#entries + 1] = value
+      table.insert(entries, {
+        text = value,
+        value = value,
+      })
     elseif value.valid ~= false then
-      entries[#entries + 1] = {
+      local name = self:_make_display(value)
+      table.insert(entries, {
         value = value.value,
-        text = self:_make_display(value),
-        path = value.filename,
-        lnum = value.lnum,
-        col = value.col,
-      }
+        text = name,
+        filename = value.filename,
+        pos = { lnum = value.lnum, col = value.col },
+      })
     end
   end
 
-  local entry = snacks_pick.start {
-    source = {
-      name = opts.prompt_title,
-      items = entries,
-      choose = function() end,
+  snacks.picker.pick {
+    title = opts.prompt_title,
+    items = entries,
+    layout = {
+      preview = false,
     },
+    format = function(item, _)
+      local ret = {}
+      local a = snacks.picker.util.align
+      ret[#ret + 1] = { a(item.text, 20) }
+      return ret
+    end,
+    confirm = function(picker, item)
+      picker:close()
+      if item and opts.callback then
+        opts.callback(item.value)
+      elseif item then
+        if item["buf"] then
+          vim.api.nvim_set_current_buf(item["buf"])
+        end
+        vim.api.nvim_win_set_cursor(0, { item["pos"][1], 0 })
+      end
+    end,
   }
-
-  if entry and opts.callback then
-    if type(entry) == "string" then
-      opts.callback(entry)
-    else
-      opts.callback(entry.value)
-    end
-  end
 end
 
 return SnacksPicker
